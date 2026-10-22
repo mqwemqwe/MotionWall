@@ -3,6 +3,8 @@ set -euo pipefail
 cd "$(dirname "$0")"
 PROJECT_DIR="$PWD"
 BUILD_DIR=""
+LOG_FILE=""
+echo "MotionWall 1.1 — установка приложения и модуля видеозаставки"
 cleanup() {
   local result=$?
   if [[ -n "$BUILD_DIR" && -d "$BUILD_DIR" ]]; then /bin/rm -rf "$BUILD_DIR"; fi
@@ -10,6 +12,7 @@ cleanup() {
     echo
     echo "Установка остановлена. Сообщение об ошибке находится выше."
     echo "Пришли скриншот этого окна, если нужна помощь."
+    if [[ -n "$LOG_FILE" ]]; then echo "Журнал: $LOG_FILE"; fi
   fi
   if [[ -t 0 ]]; then read -r -p "Нажми Enter, чтобы закрыть установщик… " || true; fi
 }
@@ -19,6 +22,10 @@ if [[ "$(uname -s)" != "Darwin" ]]; then
   echo "MotionWall устанавливается только на macOS 13 или новее."
   exit 1
 fi
+LOG_DIR="$HOME/Library/Logs/MotionWall"
+/bin/mkdir -p "$LOG_DIR"
+LOG_FILE="$LOG_DIR/Install-$(date +%Y%m%d-%H%M%S).log"
+exec > >(/usr/bin/tee -a "$LOG_FILE") 2>&1
 OS_MAJOR="$(sw_vers -productVersion | cut -d. -f1)"
 if (( OS_MAJOR < 13 )); then
   echo "Нужна macOS Ventura 13 или новее. Текущая версия: $(sw_vers -productVersion)."
@@ -36,7 +43,7 @@ if /usr/bin/pgrep -x MotionWall >/dev/null; then
 fi
 ARCH="$(uname -m)"
 if [[ "$(/usr/sbin/sysctl -n hw.optional.arm64 2>/dev/null || true)" == "1" ]]; then ARCH="arm64"; fi
-if [[ "${ARCH}" != arm64 && "${ARCH}" != x86_64 ]]; then echo "Неизвестная архитектура: ${ARCH}"; exit 1; fi
+if [[ "$ARCH" != arm64 && "$ARCH" != x86_64 ]]; then echo "Неизвестная архитектура: $ARCH"; exit 1; fi
 APPLICATIONS_DIR="$HOME/Applications"
 /bin/mkdir -p "$APPLICATIONS_DIR"
 BUILD_DIR="$(/usr/bin/mktemp -d "$APPLICATIONS_DIR/.motionwall-build.XXXXXX")"
@@ -45,19 +52,37 @@ APP="$BUILD_DIR/MotionWall.app"
 /bin/cp "$PROJECT_DIR/Resources/Info.plist" "$APP/Contents/Info.plist"
 /bin/cp "$PROJECT_DIR/Resources/conversion.json" "$APP/Contents/Resources/"
 /bin/cp "$PROJECT_DIR/THIRD_PARTY.txt" "$APP/Contents/Resources/"
+/bin/cp "$PROJECT_DIR/scripts/install_saver.py" "$APP/Contents/Resources/"
 
-echo "1/4. Получаю видеоконвертер (примерно 25 МБ, только при первой установке)…"
-/usr/bin/python3 "$PROJECT_DIR/scripts/fetch_ffmpeg.py" "${ARCH}" \
+echo "1/5. Получаю видеоконвертер (примерно 25 МБ, только при первой установке)…"
+/usr/bin/python3 "$PROJECT_DIR/scripts/fetch_ffmpeg.py" "$ARCH" \
   "$APP/Contents/Resources/ffmpeg" "$HOME/Library/Caches/MotionWallInstaller"
-echo "2/4. Собираю приложение для ${ARCH}…"
+echo "2/5. Собираю приложение для ${ARCH}…"
 /usr/bin/xcrun --sdk macosx swiftc -swift-version 5 -O -parse-as-library \
-  -target "${ARCH}-apple-macosx13.0" \
+  -target "$ARCH-apple-macosx13.0" \
   "$PROJECT_DIR"/Sources/*.swift \
   -framework AppKit -framework SwiftUI -framework AVKit -framework AVFoundation \
   -framework QuartzCore -framework ServiceManagement \
   -o "$APP/Contents/MacOS/MotionWall"
-echo "3/4. Проверяю и подписываю локальную сборку…"
+echo "3/5. Собираю системную видеозаставку…"
+SAVER="$APP/Contents/Resources/MotionWall.saver"
+/bin/mkdir -p "$SAVER/Contents/MacOS" "$SAVER/Contents/Resources"
+/bin/cp "$PROJECT_DIR/ScreenSaver/Info.plist" "$SAVER/Contents/Info.plist"
+/usr/bin/xcrun --sdk macosx clang -fobjc-arc -fmodules -O2 \
+  -arch "$ARCH" -mmacosx-version-min=13.0 -bundle \
+  "$PROJECT_DIR/ScreenSaver/MotionWallSaver.m" \
+  -framework ScreenSaver -framework AppKit -framework AVFoundation -framework QuartzCore \
+  -o "$SAVER/Contents/MacOS/MotionWallSaver"
+/usr/bin/xcrun --sdk macosx clang -fobjc-arc -fmodules \
+  -arch "$ARCH" -mmacosx-version-min=13.0 \
+  "$PROJECT_DIR/ScreenSaver/CheckSaver.m" -framework ScreenSaver -framework AppKit \
+  -o "$BUILD_DIR/check-saver"
+echo "4/5. Проверяю и подписываю локальную сборку…"
 /usr/bin/plutil -lint "$APP/Contents/Info.plist"
+/usr/bin/plutil -lint "$SAVER/Contents/Info.plist"
+/usr/bin/codesign --force --sign - --timestamp=none "$SAVER"
+/usr/bin/codesign --verify --deep --strict "$SAVER"
+"$BUILD_DIR/check-saver" "$SAVER"
 /usr/bin/codesign --force --sign - --timestamp=none "$APP/Contents/Resources/ffmpeg"
 "$APP/Contents/Resources/ffmpeg" -version >/dev/null
 /usr/bin/codesign --force --sign - --timestamp=none "$APP"
@@ -73,7 +98,7 @@ if ! /bin/mv "$APP" "$TARGET"; then
   if [[ -n "$BACKUP" ]]; then /bin/mv "$BACKUP" "$TARGET"; fi
   exit 1
 fi
-echo "4/4. Готово! Открываю MotionWall…"
+echo "5/5. Готово! Открываю MotionWall…"
 echo "Приложение: $TARGET"
 if [[ -n "$BACKUP" ]]; then echo "Предыдущая версия сохранена: $BACKUP"; fi
 /usr/bin/open "$TARGET" --args --show

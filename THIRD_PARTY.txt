@@ -25,3 +25,12 @@ https://developer.apple.com/documentation/appkit/nswindow/collectionbehavior-swi
 https://developer.apple.com/documentation/avfoundation/avplayerlooper
 https://developer.apple.com/documentation/servicemanagement/smappservice/mainapp
 https://ffmpeg.org/ffmpeg-filters.html
+
+Screen saver and temporary display wake mode (1.1):
+https://developer.apple.com/documentation/screensaver
+https://developer.apple.com/documentation/screensaver/screensaverview
+https://support.apple.com/ru-ru/guide/mac-help/mchl4b68853d/mac
+https://support.apple.com/ru-ru/guide/mac-help/mh11784/mac
+https://github.com/apple-oss-distributions/PowerManagement/blob/main/caffeinate/caffeinate.c
+https://developer.apple.com/forums/thread/787444
+https://github.com/JohnCoates/Aerial/issues/1396

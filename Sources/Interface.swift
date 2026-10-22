@@ -72,7 +72,40 @@ struct MainView: View {
                 }
             }.toggleStyle(.switch).controlSize(.small)
                 .padding(18).background(.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 14))
-                .disabled(model.restoring)
+                .disabled(model.restoring || model.installingSaver)
+
+            VStack(alignment: .leading, spacing: 12) {
+                Label("Блокировка и видеозаставка", systemImage: "lock.rectangle").font(.headline)
+                Text("Установи заставку и выбери MotionWall в настройках macOS (в новых версиях: Обои → Заставка). Для блокировки включи запрос пароля «Немедленно».")
+                    .font(.callout).foregroundStyle(.secondary)
+                HStack {
+                    Button(model.saverInstalled ? "Обновить видеозаставку…" : "Установить видеозаставку…") {
+                        model.installScreenSaver()
+                    }.disabled(model.selected == nil || model.busy)
+                    Button("Настройки заставки") { model.openScreenSaverSettings() }
+                    Button("Пароль и экран") { model.openLockSettings() }
+                }
+                Text("В заставку копируется выбранное видео с текущим масштабом. После смены видео или масштаба нажми «Обновить видеозаставку».")
+                    .font(.caption).foregroundStyle(.secondary)
+                if let message = model.saverMessage {
+                    Text(message).font(.callout).foregroundStyle(.mint).fixedSize(horizontal: false, vertical: true)
+                }
+                Divider()
+                HStack {
+                    Button("Запустить заставку macOS") { model.startScreenSaver() }
+                        .disabled(!model.saverInstalled || model.busy)
+                    Spacer()
+                    Button(model.awakeUntil == nil ? "Не гасить экран 30 минут" : "Разрешить выключение экрана") {
+                        model.toggleKeepAwake()
+                    }
+                }
+                if let until = model.awakeUntil {
+                    Text("Экран останется включённым до \(until, style: .time), пока работает MotionWall.")
+                        .font(.caption).foregroundStyle(.mint)
+                }
+                Text("Запускается заставка, выбранная в macOS. При вводе пароля появляется стандартный экран системы. Сон и закрытие крышки выключают экран. Режим на 30 минут удобнее использовать от сети.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }.padding(18).background(.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 14))
 
             HStack {
                 Button { model.install() } label: {

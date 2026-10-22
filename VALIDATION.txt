@@ -52,3 +52,63 @@ Remaining Mac-only verification (NOT executed here):
 
 The archive is a local-build distribution. It has no Developer ID
 certificate and is not an Apple-notarized binary release.
+
+Installer correction, 2026-10-22:
+- A user run on macOS failed at line 52 with ARCH?: unbound variable.
+- Braced the ARCH expansion before the Unicode ellipsis in the build
+  progress message. The previous bash syntax check did not catch this.
+- bash -n: PASS; progress message executed with set -eu for arm64 and
+  x86_64: PASS on Linux Bash 5.2.
+- Repair substitution checked on the original installer and for idempotence.
+- macOS Bash 3.2 and the full macOS build are unavailable here; not tested.
+
+MotionWall 1.1.0 — video screen saver update, 2026-10-22
+
+Implemented:
+- Native Objective-C ScreenSaverView bundle, separate AVQueuePlayer and
+  AVPlayerLooper per view, muted video, fill/fit setting, low-power pause,
+  error placeholder, explicit release on stop/deallocation/window detach.
+  Observed system stop/unlock notifications provide best-effort additional
+  teardown for legacy hosts that omit stopAnimation; no host is terminated.
+- Video and settings are copied inside the installed .saver bundle.
+  The host does not need access to MotionWall app data or the original file.
+- Background installation stages, signs and verifies the complete bundle
+  before replacing an existing owned MotionWall.saver. Failure attempts
+  rollback; a failed rollback preserves the old bundle for recovery.
+- Main application offers install/update, system settings links and launch
+  of the screen saver currently selected by macOS. On macOS 26+ the
+  settings link opens Wallpaper because the old saver pane was removed.
+- User enables immediate password requirement in macOS. The app neither
+  reads nor changes password settings and does not impersonate a lock screen.
+- Optional 30-minute display/idle-sleep inhibition uses Apple's caffeinate
+  with a timeout and parent-pid watcher; stops on app exit or system sleep.
+  No permanent power settings are changed. Explicit sleep is not prevented.
+- Installer builds and signs the .saver, then runs a native bundle load and
+  start/animate/stop smoke check on the user's Mac before replacing the app.
+
+Executed on Linux for 1.1.0:
+- bash -n Install.command: PASS.
+- Python syntax checks: PASS.
+- tests/test_saver_install.py: PASS, 8 filesystem tests, including first
+  install, self-contained video, update, signing failure, rollback,
+  failed-rollback backup preservation, missing video, foreign bundle and link.
+  Signer callbacks are test doubles; Apple codesign was NOT executed here.
+- Swift and Objective-C source syntax parsed using tree-sitter-swift and
+  tree-sitter-objc: PASS. This does NOT validate Apple API types or linking.
+- Both Info.plist files parsed successfully.
+
+Required Mac-only acceptance (not run in this environment):
+- Install.command completes Swift/Objective-C compile, signatures and
+  bundle lifecycle smoke check on the actual Mac/SDK.
+- Select MotionWall in System Settings; preview and run fullscreen for
+  two full loops, then stop. Confirm the video is visible on each display.
+- With immediate password enabled, dismiss saver and confirm the desktop
+  stays locked until system authentication. The password-entry UI remains
+  Apple's; this feature does not replace the boot/login screen background.
+- Quit MotionWall and confirm the installed saver still runs independently.
+- Update the selected video and confirm the host reloads the new content.
+- Toggle 30-minute mode, inspect pmset -g assertions, stop manually, then
+  check natural timeout, app exit, sleep/wake and closed-lid behavior.
+- Check low-power pause/resume and that decoding stops after the saver ends.
+- Legacy screen-saver hosts have OS-version-specific lifecycle and display
+  bugs; physical Mac verification is required before claiming compatibility.

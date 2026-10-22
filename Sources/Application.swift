@@ -7,16 +7,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     private var panel: NSWindow?
     private var statusItem: NSStatusItem?
     private var pauseItem: NSMenuItem?
+    private var awakeItem: NSMenuItem?
+    private var saverItem: NSMenuItem?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
         let menu = NSMenu()
+        menu.autoenablesItems = false
         menu.delegate = self
         add("Открыть MotionWall…", action: #selector(showPanel), to: menu)
         add("Выбрать видео…", action: #selector(chooseMovie), to: menu)
         menu.addItem(.separator())
         pauseItem = add("Пауза", action: #selector(togglePause), to: menu)
         add("Убрать обои", action: #selector(removeWallpaper), to: menu)
+        menu.addItem(.separator())
+        saverItem = add("Запустить заставку macOS", action: #selector(startSaver), to: menu)
+        awakeItem = add("Не гасить экран 30 минут", action: #selector(toggleAwake), to: menu)
+        add("Настройки заставки…", action: #selector(saverSettings), to: menu)
         menu.addItem(.separator())
         add("Завершить MotionWall", action: #selector(quit), to: menu, key: "q")
         let status = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
@@ -45,6 +52,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     func menuWillOpen(_ menu: NSMenu) {
         pauseItem?.title = model.preferences.paused ? "Продолжить" : "Пауза"
         pauseItem?.isEnabled = model.preferences.enabled
+        saverItem?.isEnabled = model.saverInstalled && !model.busy
+        awakeItem?.title = model.awakeUntil == nil ? "Не гасить экран 30 минут" : "Разрешить выключение экрана"
     }
     @objc func showPanel() {
         if panel == nil {
@@ -65,6 +74,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     @objc func chooseMovie() { showPanel(); model.chooseMovie() }
     @objc func togglePause() { model.togglePause() }
     @objc func removeWallpaper() { model.removeWallpaper() }
+    @objc func startSaver() { model.startScreenSaver() }
+    @objc func toggleAwake() { model.toggleKeepAwake() }
+    @objc func saverSettings() { model.openScreenSaverSettings() }
     @objc func quit() { NSApp.terminate(nil) }
     func windowWillClose(_ notification: Notification) { model.setPreviewVisible(false) }
     func windowDidMiniaturize(_ notification: Notification) { model.setPreviewVisible(false) }

@@ -17,20 +17,26 @@ final class AppModel: ObservableObject {
     @Published var sleeping = false
     @Published var sessionInactive = false
     @Published var lowPower = ProcessInfo.processInfo.isLowPowerModeEnabled
+    @Published var installingSaver = false
+    @Published var saverInstalled = false
+    @Published var saverMessage: String?
+    @Published var awakeUntil: Date?
 
     let desktop = DesktopController()
     private var job: ConversionJob?
     private var importTask: Task<Void, Never>?
     private var observers: [(NotificationCenter, NSObjectProtocol)] = []
     private var previewVisible = true
+    private var awakeProcess: Process?
 
-    var busy: Bool { importing || restoring }
+    var busy: Bool { importing || restoring || installingSaver }
     var effectivePaused: Bool {
         preferences.paused || sleeping || sessionInactive || (preferences.respectLowPower && lowPower)
     }
     var status: String {
         if importing { return progress }
         if restoring { return "Восстанавливаю обои…" }
+        if installingSaver { return "Создаю видеозаставку…" }
         if !preferences.enabled { return "Обои выключены" }
         if preferences.paused { return "Анимация на паузе" }
         if effectivePaused { return "Пауза для экономии энергии" }
@@ -42,8 +48,10 @@ final class AppModel: ObservableObject {
         catch { errorMessage = "Не удалось прочитать настройки: \(error.localizedDescription)" }
         selected = preferences.movie
         refreshLoginStatus()
+        saverInstalled = ScreenSaverSupport.isInstalled
         let workspace = NSWorkspace.shared.notificationCenter
-        observe(workspace, NSWorkspace.screensDidSleepNotification) { $0.sleeping = true; $0.updatePlayback() }
+        observe(workspace, NSWorkspace.screensDidSleepNotification) { $0.sleeping = true; $0.stopKeepingAwake(); $0.updatePlayback() }
+        observe(workspace, NSWorkspace.willSleepNotification) { $0.stopKeepingAwake() }
         observe(workspace, NSWorkspace.screensDidWakeNotification) { $0.sleeping = false; $0.updatePlayback(); $0.desktop.reorder() }
         observe(workspace, NSWorkspace.sessionDidResignActiveNotification) { $0.sessionInactive = true; $0.updatePlayback() }
         observe(workspace, NSWorkspace.sessionDidBecomeActiveNotification) { $0.sessionInactive = false; $0.updatePlayback() }
@@ -52,7 +60,9 @@ final class AppModel: ObservableObject {
         observe(.default, NSNotification.Name.NSProcessInfoPowerStateDidChange) {
             $0.lowPower = ProcessInfo.processInfo.isLowPowerModeEnabled; $0.updatePlayback()
         }
-        observe(.default, NSApplication.didBecomeActiveNotification) { $0.refreshLoginStatus() }
+        observe(.default, NSApplication.didBecomeActiveNotification) {
+            $0.refreshLoginStatus(); $0.saverInstalled = ScreenSaverSupport.isInstalled
+        }
         guard let movie = preferences.movie else { return }
         restoring = true
         Task { [weak self] in
@@ -226,7 +236,92 @@ final class AppModel: ObservableObject {
         refreshLoginStatus()
     }
     func openLoginSettings() { SMAppService.openSystemSettingsLoginItems() }
+
+    func installScreenSaver() {
+        guard let movie = selected, !busy else { return }
+        let movieURL = Storage.url(for: movie)
+        let fill = preferences.fill
+        let respectLowPower = preferences.respectLowPower
+        installingSaver = true
+        saverMessage = nil
+        Task { [weak self] in
+            guard let self = self else { return }
+            defer { self.installingSaver = false }
+            do {
+                try await ScreenSaverSupport.install(movieURL: movieURL, fill: fill, respectLowPower: respectLowPower)
+                self.saverInstalled = ScreenSaverSupport.isInstalled
+                self.saverMessage = "Готово. Выбери MotionWall в настройках заставки. В разделе «Экран блокировки» установи запрос пароля «Немедленно»."
+                self.openScreenSaverSettings()
+            } catch { self.errorMessage = error.localizedDescription }
+        }
+    }
+
+    func openScreenSaverSettings() {
+        if #available(macOS 26.0, *) {
+            openSettings("x-apple.systempreferences:com.apple.Wallpaper-Settings.extension")
+        } else {
+            openSettings("x-apple.systempreferences:com.apple.ScreenSaver-Settings.extension")
+        }
+    }
+
+    func openLockSettings() {
+        openSettings("x-apple.systempreferences:com.apple.Lock-Screen-Settings.extension")
+    }
+
+    private func openSettings(_ address: String) {
+        if let url = URL(string: address), NSWorkspace.shared.open(url) { return }
+        NSWorkspace.shared.open(URL(fileURLWithPath: "/System/Applications/System Settings.app"))
+    }
+
+    func startScreenSaver() {
+        let engine = URL(fileURLWithPath: "/System/Library/CoreServices/ScreenSaverEngine.app")
+        guard FileManager.default.fileExists(atPath: engine.path) else {
+            errorMessage = "Открой заставку через настройки macOS или активный угол."
+            return
+        }
+        // This starts the saver selected by macOS; password enforcement belongs to macOS.
+        NSWorkspace.shared.openApplication(at: engine, configuration: NSWorkspace.OpenConfiguration()) { [weak self] _, error in
+            if let error = error {
+                Task { @MainActor in self?.errorMessage = "Не удалось запустить заставку: \(error.localizedDescription)" }
+            }
+        }
+    }
+
+    func toggleKeepAwake() {
+        if awakeProcess != nil { stopKeepingAwake(); return }
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/caffeinate")
+        // No persistent power settings; ends after 30 minutes or when this app exits.
+        process.arguments = ["-d", "-i", "-t", "1800", "-w", String(ProcessInfo.processInfo.processIdentifier)]
+        process.standardInput = FileHandle.nullDevice
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
+        process.terminationHandler = { [weak self] finished in
+            Task { @MainActor in
+                guard let self = self, self.awakeProcess === finished else { return }
+                self.awakeProcess = nil
+                self.awakeUntil = nil
+                if finished.terminationStatus != 0 {
+                    self.errorMessage = "Не удалось удержать экран включённым. Проверь время выключения дисплея в настройках macOS."
+                }
+            }
+        }
+        do {
+            try process.run()
+            awakeProcess = process
+            awakeUntil = Date().addingTimeInterval(1800)
+        } catch { errorMessage = "Не удалось включить режим: \(error.localizedDescription)" }
+    }
+
+    func stopKeepingAwake() {
+        let process = awakeProcess
+        awakeProcess = nil
+        awakeUntil = nil
+        if let process = process, process.isRunning { process.terminate() }
+    }
+
     func shutdown() {
+        stopKeepingAwake()
         cancelImport()
         preview?.pause()
         desktop.remove()
