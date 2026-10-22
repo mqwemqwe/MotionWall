@@ -1,0 +1,27 @@
+MotionWall downloads FFmpeg for the user's own local installation.
+The source archive distributed here does not contain FFmpeg binaries.
+
+Pinned provider: imageio-ffmpeg 0.6.0 platform wheels (arm64 and x86_64).
+Project: https://github.com/imageio/imageio-ffmpeg
+Release and published SHA-256 hashes: https://pypi.org/project/imageio-ffmpeg/0.6.0/
+Binary provenance/build information: https://github.com/imageio/imageio-binaries
+FFmpeg: https://ffmpeg.org/
+FFmpeg source/releases: https://ffmpeg.org/download.html
+Licensing: https://ffmpeg.org/legal.html
+
+imageio-ffmpeg Python wrapper is BSD-2-Clause. Its bundled FFmpeg executable
+has its own licensing, including GPL components in builds using libx264.
+The exact binary configuration and license can be inspected with:
+  ~/Applications/MotionWall.app/Contents/Resources/ffmpeg -version
+  ~/Applications/MotionWall.app/Contents/Resources/ffmpeg -L
+
+Do not redistribute an installed bundle containing FFmpeg without satisfying
+the applicable FFmpeg/component source and license obligations. Keep this
+source-and-downloader form for sharing the project.
+
+macOS implementation references:
+https://developer.apple.com/documentation/coregraphics/cgwindowlevelkey/desktopiconwindow
+https://developer.apple.com/documentation/appkit/nswindow/collectionbehavior-swift.struct/canjoinallspaces
+https://developer.apple.com/documentation/avfoundation/avplayerlooper
+https://developer.apple.com/documentation/servicemanagement/smappservice/mainapp
+https://ffmpeg.org/ffmpeg-filters.html

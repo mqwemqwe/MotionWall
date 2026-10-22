@@ -1,0 +1,54 @@
+MotionWall 1.0.0 — verification record, 2026-10-22
+
+Executed in Linux x86_64:
+- bash -n Install.command: PASS.
+- Python compile check for installer helper: PASS.
+- Info.plist parsed using plistlib; conversion.json parsed using json: PASS.
+- All five Swift source files parsed by tree-sitter-swift without ERROR
+  or missing nodes: PASS. This is a grammar check, not an Apple SDK typecheck.
+- python3 tests/test_conversion.py: PASS, four test methods with subtests.
+  MP4, MOV, MKV, AVI, WebM, FLV and GIF converted using the exact JSON
+  recipe read by the application. Filenames contain Cyrillic, spaces,
+  apostrophes and shell metacharacters. Commands use argument arrays.
+  Every output is decoded in full and checked for H.264, yuv420p,
+  30 fps, even dimensions, square pixels, positive duration and no audio.
+  Anamorphic sample is normalized to the expected display dimensions.
+  A MOV with a verified 90-degree display matrix becomes portrait pixels.
+  Corrupted input and audio-only input are rejected.
+- Both pinned macOS imageio-ffmpeg 0.6.0 wheels downloaded successfully.
+  SHA-256 hashes matched the publisher's exact values.
+  Downloader extracted only the intended executable.
+  Mach-O architecture inspected: arm64 and x86_64 match their wheel.
+  All load-time dylib dependencies are under /usr/lib or /System/Library.
+  macOS binaries were NOT executed on Linux.
+
+Manual source review and corrections:
+- Separate AVQueuePlayer/AVPlayerLooper per monitor, avoiding reuse of
+  one AVPlayer across multiple player layers.
+- Desktop windows ignore mouse events and cannot become key/main.
+- Window level is directly below desktop icon level, above background.
+- Lifetime of loops and windows is retained after settings panel closes.
+- Playback failures from retired windows cannot remove newer sessions.
+- Item and looper failures are surfaced, returning to the system wallpaper.
+- Import uses a temporary output; current wallpaper is preserved on failure
+  or cancellation. Input files are never overwritten.
+- Cancellation terminates only the associated converter process.
+- Preferences are written atomically before applying user state changes.
+- Installer checks its prerequisites before changing the installed app,
+  stages a new bundle, and preserves the previous version on replacement.
+- No video uploads, screen recording, Accessibility control or telemetry.
+
+Remaining Mac-only verification (NOT executed here):
+1. Build with xcrun swiftc and an Apple macOS SDK; launch .app.
+2. Install a video; confirm moving frames after two loop boundaries.
+3. Confirm Finder icons remain visible/clickable and ordinary apps stay above.
+4. Close settings; verify animation continues. Pause/resume; remove wallpaper.
+5. Switch Spaces; enter/exit full screen; check Stage Manager if used.
+6. Sleep/wake and lock/unlock; test Low Power Mode.
+7. Connect/disconnect a second display and change the all-displays setting.
+8. Enable login launch; log out/in; confirm the saved wallpaper returns.
+9. Cancel a longer conversion; existing wallpaper must remain active.
+10. Quit/reopen and reinstall; verify settings and prepared media remain.
+
+The archive is a local-build distribution. It has no Developer ID
+certificate and is not an Apple-notarized binary release.
