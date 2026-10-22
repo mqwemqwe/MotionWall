@@ -1,4 +1,0 @@
-{
-  "beforeInput": ["-hide_banner", "-nostdin", "-y", "-loglevel", "error", "-protocol_whitelist", "file,pipe,crypto,data"],
-  "afterInput": ["-map", "0:V:0", "-an", "-sn", "-dn", "-vf", "scale=w='max(2,trunc(iw*sar/2)*2)':h=ih,setsar=1,scale=w='min(2560,iw)':h='min(1440,ih)':force_original_aspect_ratio=decrease:force_divisible_by=2,fps=30", "-c:v", "libx264", "-preset", "fast", "-crf", "21", "-pix_fmt", "yuv420p", "-movflags", "+faststart", "-progress", "pipe:1", "-nostats"]
-}
